@@ -1,7 +1,7 @@
 // Main game entry point
 
 import { initPool, getNextRequest } from './requests.js';
-import { createGameState, saveHighScore, getHighScore } from './game.js';
+import { createGameState, saveHighScore, getHighScore, TP_REGEN } from './game.js';
 import { 
   renderHeader, 
   renderRequest, 
@@ -9,8 +9,7 @@ import {
   renderFeedback, 
   renderGameOver,
   renderStartPage,
-  renderContinueButton,
-  updateTimerDisplay
+  renderContinueButton
 } from './ui.js';
 
 const TIMER_DURATION = 15;
@@ -29,6 +28,7 @@ class NetwatchGame {
   init() {
     const app = document.getElementById('app');
     app.innerHTML = `
+      <div id="matrix-bg"></div>
       <div id="terminal" class="terminal">
         <div id="header-bar"></div>
         <div id="request-content"></div>
@@ -43,8 +43,67 @@ class NetwatchGame {
     this.actionsContainer = document.getElementById('actions');
     this.gameoverContainer = document.getElementById('gameover');
     
+    this.startMatrix();
+    this.scheduleGlitch();
     this.startNewGame();
     this.bindEvents();
+  }
+  
+  startMatrix() {
+    const canvas = document.createElement('canvas');
+    canvas.id = 'matrix-canvas';
+    document.getElementById('matrix-bg').appendChild(canvas);
+    
+    const ctx = canvas.getContext('2d');
+    
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    
+    const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF<>/{}[]();:=+-*&$#@!%^&*';
+    const fontSize = 14;
+    const columns = Math.floor(canvas.width / fontSize);
+    const drops = Array(columns).fill(1);
+    
+    function draw() {
+      ctx.fillStyle = 'rgba(10, 12, 16, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = '#00ff88';
+      ctx.font = `${fontSize}px monospace`;
+      
+      for (let i = 0; i < drops.length; i++) {
+        const char = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+        
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    }
+    
+    setInterval(draw, 50);
+  }
+  
+  triggerGlitch() {
+    const terminal = document.querySelector('.terminal');
+    if (terminal) {
+      terminal.classList.add('glitch');
+      setTimeout(() => terminal.classList.remove('glitch'), 150);
+    }
+  }
+  
+  scheduleGlitch() {
+    // Random glitch every 3-8 seconds
+    const delay = 3000 + Math.random() * 5000;
+    setTimeout(() => {
+      this.triggerGlitch();
+      this.scheduleGlitch();
+    }, delay);
   }
   
   startNewGame() {
@@ -126,6 +185,7 @@ class NetwatchGame {
     const isCorrect = (decision === 'allow' && !isMalicious) || (decision === 'deny' && isMalicious);
     
     let damage = 0;
+    let shielded = false;
     if (!isCorrect) {
       if (isMalicious) {
         // Allowed an attack
@@ -134,7 +194,15 @@ class NetwatchGame {
         // Denied legitimate traffic — blocking customer requests
         damage = 25; // Heavy penalty for blocking valid traffic
       }
-      this.state.hp = Math.max(0, this.state.hp - damage);
+      // Apply netshield reduction if equipped
+      if (this.state.equippedTool === 'netshield') {
+        damage = Math.max(0, damage - 5);
+        shielded = damage > 0; // Only show shielded if some damage was prevented
+      }
+      this.state.tp = Math.max(0, this.state.tp - damage);
+    } else {
+      // Successful decision — replenish trust points
+      this.state.tp = Math.min(100, this.state.tp + TP_REGEN);
     }
     
     if (isCorrect) {
@@ -156,13 +224,13 @@ class NetwatchGame {
     this.render();
     
     // Check for game over
-    if (this.state.hp <= 0) {
+    if (this.state.tp <= 0) {
       setTimeout(() => this.gameOver(), 1500);
     }
   }
   
   continueGame() {
-    if (this.state.hp > 0) {
+    if (this.state.tp > 0) {
       this.nextRequest();
     }
   }

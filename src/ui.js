@@ -4,7 +4,7 @@
 export function formatPayload(body) {
   if (!body) return '<span class="null">null</span>';
   
-  // Simple JSON syntax highlighting
+  // Simple JSON syntax highlighting (all in primary green)
   return body
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -44,9 +44,9 @@ export function formatHeaders(headers) {
 
 // Render the main game view
 export function renderHeader(state, container, timeLeft = null) {
-  const hpPercent = (state.hp / 100) * 100;
-  const hpClass = hpPercent <= 30 ? 'critical' : hpPercent <= 60 ? 'warning' : '';
-  const statusText = hpPercent <= 30 ? 'CRITICAL' : hpPercent <= 60 ? 'WARNING' : 'NOMINAL';
+  const tpPercent = (state.tp / 100) * 100;
+  const tpClass = tpPercent <= 30 ? 'critical' : tpPercent <= 60 ? 'warning' : '';
+  const statusText = tpPercent <= 30 ? 'CRITICAL' : tpPercent <= 60 ? 'WARNING' : 'NOMINAL';
   
   let timerHtml = '';
   if (timeLeft !== null) {
@@ -68,11 +68,11 @@ export function renderHeader(state, container, timeLeft = null) {
         <div class="company">Veridian Systems SOC</div>
       </div>
       <div class="hp-container">
-        <span class="hp-label">HP</span>
+        <span class="hp-label">TP</span>
         <div class="hp-bar">
-          <div class="hp-fill ${hpClass}" style="width: ${hpPercent}%"></div>
+          <div class="hp-fill ${tpClass}" style="width: ${tpPercent}%"></div>
         </div>
-        <span class="hp-text">${state.hp}%</span>
+        <span class="hp-text">${state.tp}%</span>
         <span class="session-counter">[${statusText}]</span>
       </div>
       ${timerHtml}
@@ -81,30 +81,19 @@ export function renderHeader(state, container, timeLeft = null) {
   `;
 }
 
-// Update the timer display (called every second)
-export function updateTimerDisplay(timeLeft, container) {
-  const timerEl = container.querySelector('.timer-value');
-  if (timerEl) {
-    const seconds = Math.floor(timeLeft);
-    const ms = Math.floor((timeLeft % 1) * 100);
-    timerEl.textContent = `${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-    if (timeLeft <= 5) {
-      timerEl.classList.add('timer-critical');
-      timerEl.classList.remove('timer-warning');
-    } else if (timeLeft <= 10) {
-      timerEl.classList.add('timer-warning');
-      timerEl.classList.remove('timer-critical');
-    } else {
-      timerEl.classList.remove('timer-critical', 'timer-warning');
-    }
-  }
+// Helper to randomly highlight values with colors for netshield
+function highlightValue(value, enable) {
+  if (!enable || !value) return value;
+  const colors = ['shield-red', 'shield-green', 'shield-yellow'];
+  // Pick a random color
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  return `<span class="${color}">${value}</span>`;
 }
 
-// Render request details
-export function renderRequest(request, container) {
+// Render request details with optional netshield highlighting
+export function renderRequest(request, container, equippedTool = null) {
   const req = request.request;
-  const ipClass = req.srcIp.startsWith('10.') || req.srcIp.startsWith('172.') || req.srcIp.startsWith('192.') ? '' : 
-    req.srcIp === '185.234.72.19' || req.srcIp === '89.248.167.131' || req.srcIp === '45.227.34.107' ? 'danger' : '';
+  const shieldEnabled = equippedTool === 'netshield';
   
   container.innerHTML = `
     <div class="request-panel">
@@ -113,31 +102,31 @@ export function renderRequest(request, container) {
       <div class="request-body">
         <div class="field">
           <span class="field-label">TIMESTAMP:</span>
-          <span class="field-value">${req.timestamp}</span>
+          <span class="field-value">${highlightValue(req.timestamp, shieldEnabled)}</span>
         </div>
         <div class="field">
           <span class="field-label">SOURCE IP:</span>
-          <span class="field-value ${ipClass}">${req.srcIp}</span>
+          <span class="field-value">${highlightValue(req.srcIp, shieldEnabled)}</span>
         </div>
         <div class="field">
           <span class="field-label">DEST:</span>
-          <span class="field-value">${req.dest}</span>
+          <span class="field-value">${highlightValue(req.dest, shieldEnabled)}</span>
         </div>
         <div class="field">
           <span class="field-label">METHOD:</span>
-          <span class="field-value">${req.method}</span>
+          <span class="field-value">${highlightValue(req.method, shieldEnabled)}</span>
         </div>
         <div class="field">
           <span class="field-label">PATH:</span>
-          <span class="field-value">${req.path}</span>
+          <span class="field-value">${highlightValue(req.path, shieldEnabled)}</span>
         </div>
         <div class="field">
           <span class="field-label">HOST:</span>
-          <span class="field-value">${req.host}</span>
+          <span class="field-value">${highlightValue(req.host, shieldEnabled)}</span>
         </div>
         <div class="field">
           <span class="field-label">USER-AGENT:</span>
-          <span class="field-value">${req.userAgent}</span>
+          <span class="field-value">${highlightValue(req.userAgent, shieldEnabled)}</span>
         </div>
         ${req.headers && Object.keys(req.headers).length > 0 ? `
           <div class="field">
@@ -189,6 +178,7 @@ export function renderFeedback(request, decision, container) {
         <div class="feedback-verdict">VERDICT: ${verdict}</div>
         <div class="feedback-body">
           <div class="feedback-detail">• ${request.explanation}</div>
+          <div class="feedback-detail regen">• Trust replenished: +5 TP</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -201,7 +191,7 @@ export function renderFeedback(request, decision, container) {
         <div class="feedback-verdict">FALSE POSITIVE — You blocked legitimate traffic</div>
         <div class="feedback-body">
           <div class="feedback-detail">• ${request.explanation}</div>
-          <div class="feedback-detail damage">• Customer traffic blocked. Damage: -${damage} HP</div>
+          <div class="feedback-detail damage">• Customer traffic blocked. Damage: -${damage} TP</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -216,7 +206,7 @@ export function renderFeedback(request, decision, container) {
           <div class="feedback-detail">• ${request.explanation}</div>
           <div class="feedback-detail" style="margin-top: 12px; color: var(--text-dim);">How to spot this:</div>
           <div class="feedback-detail">• ${request.spotDescription}</div>
-          <div class="feedback-detail damage">• Damage: -${damage} HP</div>
+          <div class="feedback-detail damage">• Damage: -${damage} TP</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -226,6 +216,7 @@ export function renderFeedback(request, decision, container) {
 
 // Render start screen
 export function renderStartPage(state, container) {
+  const netshieldClass = state.equippedTool === 'netshield' ? 'tool-selected' : 'tool-unselected';
   container.innerHTML = `
     <div class="start-screen">
       <div class="start-logo">▌NETWATCH v2.1▌</div>
@@ -234,15 +225,25 @@ export function renderStartPage(state, container) {
       <div class="start-content">
         <p class="start-intro">You are a Tier-1 SOC Analyst assigned to the graveyard shift at Veridian Systems. Your job: analyze incoming network requests and decide whether to <span class="text-allow">ALLOW</span> or <span class="text-deny">DENY</span> them.</p>
         <p class="start-intro">Some requests are legitimate. Others are attacks. One wrong decision and your corporate network bleeds — whether you let an attack through or block a customer.</p>
+        
+        <div class="tool-section">
+          <div class="tool-header">// EQUIP TOOL</div>
+          <button class="tool-card ${netshieldClass}" data-tool="netshield">
+            <div class="tool-name">STANDARD NET SHIELD</div>
+            <div class="tool-desc">Highlights suspicious values in requests. Reduces trust loss by 5 TP on mistakes.</div>
+          </button>
+        </div>
+        
         <div class="start-rules">
           <div class="rule-header">// MISSION BRIEFING</div>
           <div class="rule"><span class="text-allow">ALLOW</span> — Request appears legitimate. Let it through.</div>
           <div class="rule"><span class="text-deny">DENY</span> — Request shows signs of malicious intent. Block it.</div>
           <div class="rule">You have <span class="text-hp">15 seconds</span> per request. Timer expires = auto-allow.</div>
-          <div class="rule">You start with <span class="text-hp">100 HP</span>. Mistakes cost HP:</div>
-          <div class="rule indent">— Allow an attack: 10-35 HP based on severity</div>
-          <div class="rule indent">— Block legitimate traffic: <span class="text-deny">25 HP</span></div>
-          <div class="rule">Game ends at <span class="text-deny">0 HP</span>. Your shift is over.</div>
+          <div class="rule">You start with <span class="text-hp">100 TP</span> (Trust Points). Mistakes cost TP:</div>
+          <div class="rule indent">— Allow an attack: 10-35 TP based on severity</div>
+          <div class="rule indent">— Block legitimate traffic: <span class="text-deny">25 TP</span></div>
+          <div class="rule indent">— Correct decisions replenish <span class="text-allow">+5 TP</span></div>
+          <div class="rule">Game ends at <span class="text-deny">0 TP</span>. Your shift is over.</div>
         </div>
         <div class="start-keys">
           <div class="key-header">// CONTROLS</div>
@@ -271,7 +272,7 @@ export function renderGameOver(state, container) {
         <div class="stats">
           <div class="stat">Requests Reviewed: <span class="stat-value">${state.totalRequests}</span></div>
           <div class="stat">Correct Decisions: <span class="stat-value">${state.correct}</span> (${accuracy}%)</div>
-          <div class="stat">Final HP: <span class="stat-value">${state.hp}</span></div>
+          <div class="stat">Final TP: <span class="stat-value">${state.tp}</span></div>
         </div>
         <button class="btn-restart" data-action="restart">[RESTART SHIFT]</button>
         <div class="high-score">High Score: <span>${state.highScore}</span> requests</div>

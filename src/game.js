@@ -1,11 +1,12 @@
 // Game state management
 
-const INITIAL_HP = 100;
-const STORAGE_KEY = 'netwatch_highscore';
+export const INITIAL_TP = 100;
+export const TP_REGEN = 5;
+export const STORAGE_KEY = 'netwatch_highscore';
 
 export function createGameState() {
   return {
-    hp: INITIAL_HP,
+    tp: INITIAL_TP,
     session: 0,
     correct: 0,
     wrong: 0,
@@ -13,7 +14,8 @@ export function createGameState() {
     gameState: 'start', // 'start' | 'playing' | 'feedback' | 'gameover'
     currentRequest: null,
     lastDecision: null, // { correct: boolean, damage: number }
-    highScore: parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10)
+    highScore: parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10),
+    equippedTool: null // 'netshield' | null
   };
 }
 
