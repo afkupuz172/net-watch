@@ -43,10 +43,23 @@ export function formatHeaders(headers) {
 }
 
 // Render the main game view
-export function renderHeader(state, container) {
+export function renderHeader(state, container, timeLeft = null) {
   const hpPercent = (state.hp / 100) * 100;
   const hpClass = hpPercent <= 30 ? 'critical' : hpPercent <= 60 ? 'warning' : '';
   const statusText = hpPercent <= 30 ? 'CRITICAL' : hpPercent <= 60 ? 'WARNING' : 'NOMINAL';
+  
+  let timerHtml = '';
+  if (timeLeft !== null) {
+    const seconds = Math.floor(timeLeft);
+    const ms = Math.floor((timeLeft % 1) * 100);
+    const timerClass = timeLeft <= 5 ? 'timer-critical' : timeLeft <= 10 ? 'timer-warning' : '';
+    timerHtml = `
+      <div class="timer">
+        <span class="timer-label">TIME</span>
+        <span class="timer-value ${timerClass}">${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}</span>
+      </div>
+    `;
+  }
   
   container.innerHTML = `
     <div class="header">
@@ -62,9 +75,29 @@ export function renderHeader(state, container) {
         <span class="hp-text">${state.hp}%</span>
         <span class="session-counter">[${statusText}]</span>
       </div>
+      ${timerHtml}
       <div class="session-counter">Request #${state.session.toString().padStart(3, '0')}</div>
     </div>
   `;
+}
+
+// Update the timer display (called every second)
+export function updateTimerDisplay(timeLeft, container) {
+  const timerEl = container.querySelector('.timer-value');
+  if (timerEl) {
+    const seconds = Math.floor(timeLeft);
+    const ms = Math.floor((timeLeft % 1) * 100);
+    timerEl.textContent = `${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+    if (timeLeft <= 5) {
+      timerEl.classList.add('timer-critical');
+      timerEl.classList.remove('timer-warning');
+    } else if (timeLeft <= 10) {
+      timerEl.classList.add('timer-warning');
+      timerEl.classList.remove('timer-critical');
+    } else {
+      timerEl.classList.remove('timer-critical', 'timer-warning');
+    }
+  }
 }
 
 // Render request details
@@ -121,6 +154,15 @@ export function renderRequest(request, container) {
   `;
 }
 
+// Render continue button for feedback state
+export function renderContinueButton(container) {
+  container.innerHTML = `
+    <div class="actions">
+      <button class="btn btn-continue" data-action="continue">[CONTINUE]</button>
+    </div>
+  `;
+}
+
 // Render action buttons
 export function renderActions(enabled, container) {
   container.innerHTML = `
@@ -135,15 +177,31 @@ export function renderActions(enabled, container) {
 export function renderFeedback(request, decision, container) {
   const isCorrect = decision.correct;
   const damage = decision.damage || 0;
+  const isMalicious = request.isMalicious;
+  const wasBlockingLegit = !isCorrect && !isMalicious;
   
   if (isCorrect) {
+    const verdict = isMalicious ? 'THREAT NEUTRALIZED' : 'CLEAN';
     container.innerHTML = `
       <div class="feedback-panel">
-        <div class="feedback-header success">✓ REQUEST #${request.id} — ALLOWED</div>
+        <div class="feedback-header success">✓ REQUEST #${request.id} — ${isMalicious ? 'DENIED' : 'ALLOWED'}</div>
         <hr class="divider">
-        <div class="feedback-verdict">VERDICT: CLEAN</div>
+        <div class="feedback-verdict">VERDICT: ${verdict}</div>
         <div class="feedback-body">
           <div class="feedback-detail">• ${request.explanation}</div>
+        </div>
+        <div class="continue-prompt">Press SPACE or click to continue...</div>
+      </div>
+    `;
+  } else if (wasBlockingLegit) {
+    container.innerHTML = `
+      <div class="feedback-panel">
+        <div class="feedback-header failure">✗ REQUEST #${request.id} — BLOCKED</div>
+        <hr class="divider">
+        <div class="feedback-verdict">FALSE POSITIVE — You blocked legitimate traffic</div>
+        <div class="feedback-body">
+          <div class="feedback-detail">• ${request.explanation}</div>
+          <div class="feedback-detail damage">• Customer traffic blocked. Damage: -${damage} HP</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -175,12 +233,15 @@ export function renderStartPage(state, container) {
       <hr class="divider">
       <div class="start-content">
         <p class="start-intro">You are a Tier-1 SOC Analyst assigned to the graveyard shift at Veridian Systems. Your job: analyze incoming network requests and decide whether to <span class="text-allow">ALLOW</span> or <span class="text-deny">DENY</span> them.</p>
-        <p class="start-intro">Some requests are legitimate. Others are attacks. One wrong decision and your corporate network bleeds.</p>
+        <p class="start-intro">Some requests are legitimate. Others are attacks. One wrong decision and your corporate network bleeds — whether you let an attack through or block a customer.</p>
         <div class="start-rules">
           <div class="rule-header">// MISSION BRIEFING</div>
           <div class="rule"><span class="text-allow">ALLOW</span> — Request appears legitimate. Let it through.</div>
           <div class="rule"><span class="text-deny">DENY</span> — Request shows signs of malicious intent. Block it.</div>
-          <div class="rule">You start with <span class="text-hp">100 HP</span>. Each successful attack costs you HP based on severity.</div>
+          <div class="rule">You have <span class="text-hp">15 seconds</span> per request. Timer expires = auto-allow.</div>
+          <div class="rule">You start with <span class="text-hp">100 HP</span>. Mistakes cost HP:</div>
+          <div class="rule indent">— Allow an attack: 10-35 HP based on severity</div>
+          <div class="rule indent">— Block legitimate traffic: <span class="text-deny">25 HP</span></div>
           <div class="rule">Game ends at <span class="text-deny">0 HP</span>. Your shift is over.</div>
         </div>
         <div class="start-keys">

@@ -96,10 +96,10 @@ body {
   justify-content: space-between;
   padding: 12px 16px;
   background: var(--bg-terminal);
-  border: 1px solid var(--border);
-  border-bottom: none;
+  border-bottom: 1px solid var(--border);
   gap: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .logo {
@@ -170,10 +170,50 @@ body {
   color: var(--text-dim);
 }
 
+/* Timer */
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.timer-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.timer-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 70px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s, opacity 0.3s;
+}
+
+.timer-value.timer-warning {
+  color: var(--warning);
+}
+
+.timer-value.timer-critical {
+  color: var(--danger);
+  animation: blink-timer 0.5s infinite;
+}
+
+@keyframes blink-timer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 /* Main Terminal */
 .terminal {
   background: var(--bg-terminal);
   border: 1px solid var(--border);
+  border-bottom: none;
   min-height: 500px;
   display: flex;
   flex-direction: column;
@@ -326,6 +366,27 @@ body {
   transform: scale(0.98);
 }
 
+.btn-continue {
+  grid-column: 1 / -1;
+  padding: 16px 24px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border: 2px solid var(--text-dim);
+  background: transparent;
+  color: var(--text-dim);
+  transition: all 150ms ease;
+}
+
+.btn-continue:hover {
+  border-color: var(--text);
+  color: var(--text);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
 /* Feedback Panel */
 .feedback-panel {
   flex: 1;
@@ -441,6 +502,11 @@ body {
 .rule {
   margin-bottom: 8px;
   line-height: 1.5;
+}
+
+.rule.indent {
+  padding-left: 16px;
+  color: var(--text-dim);
 }
 
 .key {

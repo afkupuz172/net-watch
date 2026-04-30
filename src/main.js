@@ -8,15 +8,20 @@ import {
   renderActions, 
   renderFeedback, 
   renderGameOver,
-  renderStartPage 
+  renderStartPage,
+  renderContinueButton,
+  updateTimerDisplay
 } from './ui.js';
+
+const TIMER_DURATION = 15;
 
 class NetwatchGame {
   constructor() {
     this.state = createGameState();
     this.terminal = null;
     this.actionsContainer = null;
-    this.typewriterTimeout = null;
+    this.timerInterval = null;
+    this.timeLeft = TIMER_DURATION;
     
     this.init();
   }
@@ -24,12 +29,17 @@ class NetwatchGame {
   init() {
     const app = document.getElementById('app');
     app.innerHTML = `
-      <div id="terminal" class="terminal"></div>
+      <div id="terminal" class="terminal">
+        <div id="header-bar"></div>
+        <div id="request-content"></div>
+      </div>
       <div id="actions" class="actions"></div>
       <div id="gameover"></div>
     `;
     
     this.terminal = document.getElementById('terminal');
+    this.headerBar = document.getElementById('header-bar');
+    this.requestContent = document.getElementById('request-content');
     this.actionsContainer = document.getElementById('actions');
     this.gameoverContainer = document.getElementById('gameover');
     
@@ -38,6 +48,7 @@ class NetwatchGame {
   }
   
   startNewGame() {
+    this.stopTimer();
     this.state = createGameState();
     this.state.highScore = getHighScore();
     this.gameoverContainer.innerHTML = '';
@@ -46,7 +57,44 @@ class NetwatchGame {
     this.render();
   }
   
+  startTimer() {
+    this.stopTimer();
+    this.timeLeft = TIMER_DURATION;
+    this.timerInterval = setInterval(() => {
+      this.timeLeft = Math.max(0, this.timeLeft - 0.1);
+      const seconds = Math.floor(this.timeLeft);
+      const ms = Math.floor((this.timeLeft % 1) * 100);
+      const timerEl = this.headerBar.querySelector('.timer-value');
+      if (timerEl) {
+        timerEl.textContent = `${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+        if (this.timeLeft <= 5) {
+          timerEl.classList.add('timer-critical');
+          timerEl.classList.remove('timer-warning');
+        } else if (this.timeLeft <= 10) {
+          timerEl.classList.add('timer-warning');
+          timerEl.classList.remove('timer-critical');
+        } else {
+          timerEl.classList.remove('timer-critical', 'timer-warning');
+        }
+      }
+      
+      if (this.timeLeft <= 0) {
+        this.stopTimer();
+        this.handleDecision('allow');
+      }
+    }, 100);
+  }
+  
+  stopTimer() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+  }
+  
   nextRequest() {
+    this.stopTimer();
+    this.timeLeft = TIMER_DURATION;
     this.state.session++;
     this.state.gameState = 'playing';
     this.state.currentRequest = getNextRequest();
@@ -57,23 +105,35 @@ class NetwatchGame {
     // Disable buttons during typewriter
     renderActions(false, this.actionsContainer);
     
-    // Simulate typing delay before showing request
+    // Simulate typing delay before showing request, then enable timer
     setTimeout(() => {
       this.render();
       renderActions(true, this.actionsContainer);
+      this.startTimer();
     }, 500);
   }
   
   handleDecision(decision) {
     if (this.state.gameState !== 'playing') return;
     
+    this.stopTimer();
+    
     const request = this.state.currentRequest;
     const isMalicious = request.isMalicious;
+    
+    // Correct: allow clean OR deny malicious
+    // Wrong: allow malicious (attack succeeds) OR deny clean (blocking valid traffic)
     const isCorrect = (decision === 'allow' && !isMalicious) || (decision === 'deny' && isMalicious);
     
     let damage = 0;
-    if (!isCorrect && isMalicious) {
-      damage = request.damage || 10;
+    if (!isCorrect) {
+      if (isMalicious) {
+        // Allowed an attack
+        damage = request.damage || 10;
+      } else {
+        // Denied legitimate traffic — blocking customer requests
+        damage = 25; // Heavy penalty for blocking valid traffic
+      }
       this.state.hp = Math.max(0, this.state.hp - damage);
     }
     
@@ -108,6 +168,7 @@ class NetwatchGame {
   }
   
   gameOver() {
+    this.stopTimer();
     this.state.gameState = 'gameover';
     
     // Update high score
@@ -121,18 +182,22 @@ class NetwatchGame {
   }
   
   render() {
-    renderHeader(this.state, this.terminal);
+    const showTimer = this.state.gameState === 'playing';
+    renderHeader(this.state, this.headerBar, showTimer ? this.timeLeft : null);
+    
+    // Clear actions between sessions
+    this.actionsContainer.innerHTML = '';
     
     if (this.state.gameState === 'start') {
-      renderStartPage(this.state, this.terminal);
-    } else if (this.state.gameState === 'playing' || this.state.gameState === 'feedback') {
+      renderStartPage(this.state, this.requestContent);
+    } else if (this.state.gameState === 'playing') {
       const request = this.state.currentRequest;
-      
-      if (this.state.gameState === 'playing') {
-        renderRequest(request, this.terminal);
-      } else {
-        renderFeedback(request, this.state.lastDecision, this.terminal);
-      }
+      renderRequest(request, this.requestContent);
+      renderActions(true, this.actionsContainer);
+    } else if (this.state.gameState === 'feedback') {
+      const request = this.state.currentRequest;
+      renderFeedback(request, this.state.lastDecision, this.requestContent);
+      renderContinueButton(this.actionsContainer);
     }
   }
   
@@ -156,12 +221,20 @@ class NetwatchGame {
     });
     
     // Start button and restart button
-    this.terminal.addEventListener('click', (e) => {
+    this.requestContent.addEventListener('click', (e) => {
       if (e.target.dataset.action === 'start') {
         this.startGame();
       } else if (e.target.dataset.action === 'restart') {
         this.startNewGame();
       } else if (this.state.gameState === 'feedback') {
+        this.continueGame();
+      }
+    });
+    
+    // Continue button in actions container
+    this.actionsContainer.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-continue');
+      if (btn && this.state.gameState === 'feedback') {
         this.continueGame();
       }
     });
