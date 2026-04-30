@@ -260,7 +260,7 @@ class NetwatchGame {
       renderStartPage(this.state, this.requestContent);
     } else if (this.state.gameState === 'playing') {
       const request = this.state.currentRequest;
-      renderRequest(request, this.requestContent);
+      renderRequest(request, this.requestContent, this.state.equippedTool);
       renderActions(true, this.actionsContainer);
     } else if (this.state.gameState === 'feedback') {
       const request = this.state.currentRequest;
@@ -296,6 +296,17 @@ class NetwatchGame {
         this.startNewGame();
       } else if (this.state.gameState === 'feedback') {
         this.continueGame();
+      }
+    });
+    
+    // Tool selection
+    this.requestContent.addEventListener('click', (e) => {
+      if (this.state.gameState !== 'start') return;
+      const toolCard = e.target.closest('.tool-card');
+      if (toolCard) {
+        const tool = toolCard.dataset.tool;
+        this.state.equippedTool = tool === this.state.equippedTool ? null : tool;
+        this.render();
       }
     });
     
