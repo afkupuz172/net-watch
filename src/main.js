@@ -28,7 +28,6 @@ class NetwatchGame {
   init() {
     const app = document.getElementById('app');
     app.innerHTML = `
-      <div id="matrix-bg"></div>
       <div id="terminal" class="terminal">
         <div id="header-bar"></div>
         <div id="request-content"></div>
@@ -43,50 +42,9 @@ class NetwatchGame {
     this.actionsContainer = document.getElementById('actions');
     this.gameoverContainer = document.getElementById('gameover');
     
-    this.startMatrix();
     this.scheduleGlitch();
     this.startNewGame();
     this.bindEvents();
-  }
-  
-  startMatrix() {
-    const canvas = document.createElement('canvas');
-    canvas.id = 'matrix-canvas';
-    document.getElementById('matrix-bg').appendChild(canvas);
-    
-    const ctx = canvas.getContext('2d');
-    
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener('resize', resize);
-    
-    const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF<>/{}[]();:=+-*&$#@!%^&*';
-    const fontSize = 14;
-    const columns = Math.floor(canvas.width / fontSize);
-    const drops = Array(columns).fill(1);
-    
-    function draw() {
-      ctx.fillStyle = 'rgba(10, 12, 16, 0.05)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      ctx.fillStyle = '#00ff88';
-      ctx.font = `${fontSize}px monospace`;
-      
-      for (let i = 0; i < drops.length; i++) {
-        const char = chars[Math.floor(Math.random() * chars.length)];
-        ctx.fillText(char, i * fontSize, drops[i] * fontSize);
-        
-        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-          drops[i] = 0;
-        }
-        drops[i]++;
-      }
-    }
-    
-    setInterval(draw, 50);
   }
   
   triggerGlitch() {
@@ -285,6 +243,8 @@ class NetwatchGame {
         this.handleDecision('allow');
       } else if (action === 'deny') {
         this.handleDecision('deny');
+      } else if (action === 'giveup') {
+        this.gameOver();
       }
     });
     

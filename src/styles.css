@@ -43,7 +43,7 @@ body {
   font-family: 'IBM Plex Mono', 'Courier New', monospace;
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -51,6 +51,7 @@ body {
   padding: 16px;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* Scanline overlay */
@@ -84,25 +85,12 @@ body {
   animation: flicker 8s infinite;
 }
 
-/* Matrix Background */
-#matrix-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  opacity: 0.15;
-  pointer-events: none;
-}
-
-#matrix-bg canvas {
-  display: block;
-}
-
 #app {
   width: 100%;
   max-width: 800px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   position: relative;
   z-index: 1;
 }
@@ -232,10 +220,18 @@ body {
   background: rgba(13, 17, 23, 0.9);
   border: 1px solid var(--border);
   border-bottom: none;
-  min-height: 500px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
+}
+
+#request-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* Glitch effect */
@@ -354,11 +350,48 @@ body {
 
 /* Action Buttons */
 .actions {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   padding: 16px;
   border-top: 1px solid var(--border);
+}
+
+/* hCaptcha Enterprise annotations */
+.hcaptcha-annotation {
+  font-size: 11px;
+  margin-top: 3px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-left: 2px solid;
+  line-height: 1.4;
+  font-style: italic;
+}
+.hcaptcha-green { color: #00ff88; border-color: #00ff88; background: rgba(0,255,136,0.04); }
+.hcaptcha-yellow { color: #ffaa00; border-color: #ffaa00; background: rgba(255,170,0,0.04); }
+.hcaptcha-red { color: #ff3366; border-color: #ff3366; background: rgba(255,51,102,0.06); }
+
+/* I Give Up button */
+.btn-giveup {
+  grid-column: 1 / -1;
+  padding: 10px 24px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border: 1px solid var(--text-dim);
+  background: transparent;
+  color: var(--text-dim);
+  transition: all 150ms ease;
+  opacity: 0.5;
+}
+.btn-giveup:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  opacity: 1;
 }
 
 .btn {
@@ -787,7 +820,7 @@ body {
   }
 
   .terminal {
-    min-height: calc(100vh - 140px);
+    /* height managed by flex layout */
   }
 
   /* Header - more compact */

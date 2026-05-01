@@ -68,17 +68,69 @@ export function renderHeader(state, container, timeLeft = null) {
         <div class="company">Veridian Systems SOC</div>
       </div>
       <div class="hp-container">
-        <span class="hp-label">TP</span>
+        <span class="hp-label">Trust Points</span>
         <div class="hp-bar">
           <div class="hp-fill ${tpClass}" style="width: ${tpPercent}%"></div>
         </div>
-        <span class="hp-text">${state.tp}%</span>
+        <span class="hp-text">${state.tp} TP</span>
         <span class="session-counter">[${statusText}]</span>
       </div>
       ${timerHtml}
       <div class="session-counter">Request #${state.session.toString().padStart(3, '0')}</div>
     </div>
   `;
+}
+
+// hCaptcha Enterprise annotation engine
+const HCAPTCHA_GREEN_QUIPS = [
+  'Boring. Beautifully, legally boring.',
+  'Nothing to see here. Carry on.',
+  'Clean as a freshly wiped server.',
+  'Certified safe by hCaptcha Enterprise\u2122. Probably.',
+  'This traffic has never committed a crime. Unlike Dave from sales.'
+];
+
+function hcaptchaHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffff;
+  return h;
+}
+
+function getHCaptchaAnnotation(value) {
+  if (!value) return null;
+  const v = String(value);
+  const redChecks = [
+    [/['"]\s*(--|or\s+1\s*=\s*1|union\s+select|drop\s+table)/i, '\u2190 \uD83D\uDEA8 SQL injection. This attacker learned from a 2009 tutorial. It shows.'],
+    [/<script|onerror\s*=|onload\s*=|javascript:/i, '\u2190 \uD83D\uDEA8 JavaScript in a text field. Peak 2005 hacker energy. Block with prejudice.'],
+    [/file:\/\/\/|\/etc\/passwd|\/etc\/shadow/i, '\u2190 \uD83D\uDEA8 Trying to read system files. Bold strategy. Not a great one.'],
+    [/rm\s+-rf|;\s*curl.*\|.*bash|&&.*curl/i, '\u2190 \uD83D\uDEA8 Shell commands in a form field. They just typed their attack out loud. Respect the audacity.'],
+    [/169\.254\.169\.254/i, '\u2190 \uD83D\uDEA8 AWS metadata endpoint. Someone watched Mr. Robot and skipped the ethics episode.'],
+    [/bypass_mfa|role.*admin.*true/i, '\u2190 \uD83D\uDEA8 Asking to skip MFA and be admin simultaneously. Attacker or very confused intern.'],
+    [/totally-not-malware|evil\.com|evil\.net/i, '\u2190 \uD83D\uDEA8 The domain name is a confession. Deny. Frame it on the wall.'],
+    [/stdClass.*cmd|O:\d+.*cmd/i, '\u2190 \uD83D\uDEA8 Serialized object with a cmd field. Someone is very proud of themselves right now.'],
+    [/\.\.\//i, '\u2190 \uD83D\uDEA8 Path traversal. Trying to escape the directory like a very determined hamster.'],
+    [/hunter2|' OR '/i, '\u2190 \uD83D\uDEA8 Either a SQL injection or the world\'s worst password. Possibly both.'],
+  ];
+  const yellowChecks = [
+    [/python-requests|go-http-client/i, '\u2190 \u26A0\uFE0F Automated client. Could be legit tooling. Could be chaos on a basement server.'],
+    [/185\.234\.|89\.248\.|45\.227\./i, '\u2190 \u26A0\uFE0F Sketchy IP range. Like a coworker who\'s \'technically never been convicted.\''],
+    [/\/admin|\/exec|\/serialize|\/deploy/i, '\u2190 \u26A0\uFE0F Sensitive path. Legitimate admins exist. So do very determined non-admins.'],
+    [/summer\d{4}|qwerty|letmein/i, '\u2190 \u26A0\uFE0F Password pattern from a leaked database. At this point, a tradition.'],
+  ];
+  for (const [re, quip] of redChecks) {
+    if (re.test(v)) return { level: 'red', quip };
+  }
+  for (const [re, quip] of yellowChecks) {
+    if (re.test(v)) return { level: 'yellow', quip };
+  }
+  const idx = hcaptchaHash(v) % HCAPTCHA_GREEN_QUIPS.length;
+  return { level: 'green', quip: HCAPTCHA_GREEN_QUIPS[idx] };
+}
+
+function renderHCaptchaAnnotation(value) {
+  const ann = getHCaptchaAnnotation(value);
+  if (!ann) return '';
+  return `<div class="hcaptcha-annotation hcaptcha-${ann.level}">${ann.quip}</div>`;
 }
 
 // Helper to randomly highlight values with colors for netshield
@@ -90,10 +142,11 @@ function highlightValue(value, enable) {
   return `<span class="${color}">${value}</span>`;
 }
 
-// Render request details with optional netshield highlighting
+// Render request details with optional netshield/hcaptcha highlighting
 export function renderRequest(request, container, equippedTool = null) {
   const req = request.request;
   const shieldEnabled = equippedTool === 'netshield';
+  const hcaptchaEnabled = equippedTool === 'hcaptcha';
   
   container.innerHTML = `
     <div class="request-panel">
@@ -108,6 +161,7 @@ export function renderRequest(request, container, equippedTool = null) {
           <span class="field-label">SOURCE IP:</span>
           <span class="field-value">${highlightValue(req.srcIp, shieldEnabled)}</span>
         </div>
+        ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.srcIp) : ''}
         <div class="field">
           <span class="field-label">DEST:</span>
           <span class="field-value">${highlightValue(req.dest, shieldEnabled)}</span>
@@ -120,6 +174,7 @@ export function renderRequest(request, container, equippedTool = null) {
           <span class="field-label">PATH:</span>
           <span class="field-value">${highlightValue(req.path, shieldEnabled)}</span>
         </div>
+        ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.path) : ''}
         <div class="field">
           <span class="field-label">HOST:</span>
           <span class="field-value">${highlightValue(req.host, shieldEnabled)}</span>
@@ -128,6 +183,7 @@ export function renderRequest(request, container, equippedTool = null) {
           <span class="field-label">USER-AGENT:</span>
           <span class="field-value">${highlightValue(req.userAgent, shieldEnabled)}</span>
         </div>
+        ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.userAgent) : ''}
         ${req.headers && Object.keys(req.headers).length > 0 ? `
           <div class="field">
             <span class="field-label">HEADERS:</span>
@@ -137,6 +193,7 @@ export function renderRequest(request, container, equippedTool = null) {
         ${req.body ? `
           <div class="payload-label">[REQUEST BODY]</div>
           <div class="payload">${formatPayload(req.body)}</div>
+          ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.body) : ''}
         ` : ''}
       </div>
     </div>
@@ -158,6 +215,7 @@ export function renderActions(enabled, container) {
     <div class="actions">
       <button class="btn btn-allow" data-action="allow" ${enabled ? '' : 'disabled'}>[A] ALLOW</button>
       <button class="btn btn-deny" data-action="deny" ${enabled ? '' : 'disabled'}>[D] DENY</button>
+      <button class="btn btn-giveup" data-action="giveup">[ I GIVE UP ]</button>
     </div>
   `;
 }
@@ -178,7 +236,7 @@ export function renderFeedback(request, decision, container) {
         <div class="feedback-verdict">VERDICT: ${verdict}</div>
         <div class="feedback-body">
           <div class="feedback-detail">• ${request.explanation}</div>
-          <div class="feedback-detail regen">• Trust replenished: +5 TP</div>
+          <div class="feedback-detail regen">• Trust replenished: +5 Trust Points</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -191,7 +249,7 @@ export function renderFeedback(request, decision, container) {
         <div class="feedback-verdict">FALSE POSITIVE — You blocked legitimate traffic</div>
         <div class="feedback-body">
           <div class="feedback-detail">• ${request.explanation}</div>
-          <div class="feedback-detail damage">• Customer traffic blocked. Damage: -${damage} TP</div>
+          <div class="feedback-detail damage">• Customer traffic blocked. Damage: -${damage} Trust Points</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -206,7 +264,7 @@ export function renderFeedback(request, decision, container) {
           <div class="feedback-detail">• ${request.explanation}</div>
           <div class="feedback-detail" style="margin-top: 12px; color: var(--text-dim);">How to spot this:</div>
           <div class="feedback-detail">• ${request.spotDescription}</div>
-          <div class="feedback-detail damage">• Damage: -${damage} TP</div>
+          <div class="feedback-detail damage">• Damage: -${damage} Trust Points</div>
         </div>
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
@@ -217,6 +275,7 @@ export function renderFeedback(request, decision, container) {
 // Render start screen
 export function renderStartPage(state, container) {
   const netshieldClass = state.equippedTool === 'netshield' ? 'tool-selected' : 'tool-unselected';
+  const hcaptchaClass = state.equippedTool === 'hcaptcha' ? 'tool-selected' : 'tool-unselected';
   container.innerHTML = `
     <div class="start-screen">
       <div class="start-logo">▌NETWATCH v2.1▌</div>
@@ -227,10 +286,14 @@ export function renderStartPage(state, container) {
         <p class="start-intro">Some requests are legitimate. Others are attacks. One wrong decision and your corporate network bleeds — whether you let an attack through or block a customer.</p>
         
         <div class="tool-section">
-          <div class="tool-header">// EQUIP TOOL</div>
+          <div class="tool-header">// EQUIP TOOL (select one)</div>
           <button class="tool-card ${netshieldClass}" data-tool="netshield">
             <div class="tool-name">STANDARD NET SHIELD</div>
-            <div class="tool-desc">Highlights suspicious values in requests. Reduces trust loss by 5 TP on mistakes.</div>
+            <div class="tool-desc">Highlights suspicious values in requests. Reduces Trust Points loss by 5 on mistakes.</div>
+          </button>
+          <button class="tool-card ${hcaptchaClass}" data-tool="hcaptcha" style="margin-top: 8px;">
+            <div class="tool-name">hCAPTCHA ENTERPRISE</div>
+            <div class="tool-desc">AI-powered traffic analysis. Annotates each request field with color-coded threat arrows and a professional assessment. Results may vary. Mostly they don't.</div>
           </button>
         </div>
         
@@ -239,11 +302,11 @@ export function renderStartPage(state, container) {
           <div class="rule"><span class="text-allow">ALLOW</span> — Request appears legitimate. Let it through.</div>
           <div class="rule"><span class="text-deny">DENY</span> — Request shows signs of malicious intent. Block it.</div>
           <div class="rule">You have <span class="text-hp">15 seconds</span> per request. Timer expires = auto-allow.</div>
-          <div class="rule">You start with <span class="text-hp">100 TP</span> (Trust Points). Mistakes cost TP:</div>
-          <div class="rule indent">— Allow an attack: 10-35 TP based on severity</div>
-          <div class="rule indent">— Block legitimate traffic: <span class="text-deny">25 TP</span></div>
-          <div class="rule indent">— Correct decisions replenish <span class="text-allow">+5 TP</span></div>
-          <div class="rule">Game ends at <span class="text-deny">0 TP</span>. Your shift is over.</div>
+          <div class="rule">You start with <span class="text-hp">100 Trust Points</span>. Mistakes cost Trust Points:</div>
+          <div class="rule indent">— Allow an attack: 10-35 Trust Points based on severity</div>
+          <div class="rule indent">— Block legitimate traffic: <span class="text-deny">25 Trust Points</span></div>
+          <div class="rule indent">— Correct decisions replenish <span class="text-allow">+5 Trust Points</span></div>
+          <div class="rule">Game ends at <span class="text-deny">0 Trust Points</span>. Your shift is over.</div>
         </div>
         <div class="start-keys">
           <div class="key-header">// CONTROLS</div>
@@ -272,7 +335,7 @@ export function renderGameOver(state, container) {
         <div class="stats">
           <div class="stat">Requests Reviewed: <span class="stat-value">${state.totalRequests}</span></div>
           <div class="stat">Correct Decisions: <span class="stat-value">${state.correct}</span> (${accuracy}%)</div>
-          <div class="stat">Final TP: <span class="stat-value">${state.tp}</span></div>
+          <div class="stat">Final Trust Points: <span class="stat-value">${state.tp}</span></div>
         </div>
         <button class="btn-restart" data-action="restart">[RESTART SHIFT]</button>
         <div class="high-score">High Score: <span>${state.highScore}</span> requests</div>
