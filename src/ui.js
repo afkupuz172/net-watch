@@ -87,7 +87,32 @@ const HCAPTCHA_GREEN_QUIPS = [
   'Nothing to see here. Carry on.',
   'Clean as a freshly wiped server.',
   'Certified safe by hCaptcha Enterprise\u2122. Probably.',
-  'This traffic has never committed a crime. Unlike Dave from sales.'
+  'This traffic has never committed a crime. Unlike Dave from sales.',
+  'Squeaky clean. Almost suspiciously so. Almost.',
+  'hCaptcha gives this a thumbs up. One of its robotic thumbs.',
+  'Completely ordinary. A truly unremarkable piece of the internet.',
+  'No flags. No concerns. No fun.',
+  'Verified. Legitimate. Dull. Moving on.',
+  'This could not be more legal if it tried.',
+  'A beacon of compliance in a dark, dark network.',
+  'Our algorithms found nothing. Our therapist found plenty, but that is unrelated.',
+  'Harmless. Like a golden retriever wearing a tiny tie.',
+  'hCaptcha Enterprise\u2122 sees no evil. Hears no evil. Bills quarterly regardless.',
+  'Traffic of this caliber deserves a small certificate. We did not include one.',
+  'So clean it squeaks. hCaptcha appreciates the effort.',
+  'Not a single RFC violation. Someone actually read the docs.',
+  'Legitimate. Authorized. Allowed. Please proceed. Thank you for your service.',
+  'This request has done nothing wrong and should be allowed to live its life.'
+];
+
+// Green quips for clean fields on a malicious overall request \u2014 nudge toward DENY
+const HCAPTCHA_GREEN_DENY_NUDGE = [
+  '\u2190 \u2713 This specific field is clean. The rest of this request is another matter entirely.',
+  '\u2190 \u2713 Nothing suspicious here. Keep reading. Something is waiting for you.',
+  '\u2190 \u2713 hCaptcha Enterprise\u2122 sees no issue with this field. That does not mean there are none.',
+  '\u2190 \u2713 Clean. Suspiciously so. Look at the other fields before you decide.',
+  '\u2190 \u2713 This one passes. We are not done here.',
+  '\u2190 \u2713 Safe. But hCaptcha suggests you examine the full picture before trusting it.',
 ];
 
 function hcaptchaHash(str) {
@@ -96,7 +121,7 @@ function hcaptchaHash(str) {
   return h;
 }
 
-function getHCaptchaAnnotation(value) {
+function getHCaptchaAnnotation(value, isMalicious = false) {
   if (!value) return null;
   const v = String(value);
   const redChecks = [
@@ -123,14 +148,24 @@ function getHCaptchaAnnotation(value) {
   for (const [re, quip] of yellowChecks) {
     if (re.test(v)) return { level: 'yellow', quip };
   }
+  if (isMalicious) {
+    const idx = hcaptchaHash(v) % HCAPTCHA_GREEN_DENY_NUDGE.length;
+    return { level: 'green', quip: HCAPTCHA_GREEN_DENY_NUDGE[idx] };
+  }
   const idx = hcaptchaHash(v) % HCAPTCHA_GREEN_QUIPS.length;
   return { level: 'green', quip: HCAPTCHA_GREEN_QUIPS[idx] };
 }
 
-function renderHCaptchaAnnotation(value) {
-  const ann = getHCaptchaAnnotation(value);
-  if (!ann) return '';
-  return `<div class="hcaptcha-annotation hcaptcha-${ann.level}">${ann.quip}</div>`;
+function renderAnnotatedField(label, value, isMalicious, shieldEnabled) {
+  const ann = getHCaptchaAnnotation(value, isMalicious);
+  const colorClass = ann ? `hcaptcha-field-${ann.level}` : '';
+  return `
+    <div class="field">
+      <span class="field-label">${label}:</span>
+      <span class="field-value ${colorClass}">${highlightValue(value, shieldEnabled)}</span>
+    </div>
+    ${ann ? `<div class="hcaptcha-annotation hcaptcha-${ann.level}">${ann.quip}</div>` : ''}
+  `;
 }
 
 // Helper to randomly highlight values with colors for netshield
@@ -147,43 +182,31 @@ export function renderRequest(request, container, equippedTool = null) {
   const req = request.request;
   const shieldEnabled = equippedTool === 'netshield';
   const hcaptchaEnabled = equippedTool === 'hcaptcha';
-  
+  const isMalicious = request.isMalicious;
+
+  function plainField(label, value) {
+    return `<div class="field"><span class="field-label">${label}:</span><span class="field-value">${highlightValue(value, shieldEnabled)}</span></div>`;
+  }
+  function annotatedField(label, value) {
+    return hcaptchaEnabled
+      ? renderAnnotatedField(label, value, isMalicious, shieldEnabled)
+      : plainField(label, value);
+  }
+
+  const bodyAnn = hcaptchaEnabled && req.body ? getHCaptchaAnnotation(req.body, isMalicious) : null;
+
   container.innerHTML = `
     <div class="request-panel">
       <div class="session-label">Incoming Request #${request.id}</div>
       <hr class="divider">
       <div class="request-body">
-        <div class="field">
-          <span class="field-label">TIMESTAMP:</span>
-          <span class="field-value">${highlightValue(req.timestamp, shieldEnabled)}</span>
-        </div>
-        <div class="field">
-          <span class="field-label">SOURCE IP:</span>
-          <span class="field-value">${highlightValue(req.srcIp, shieldEnabled)}</span>
-        </div>
-        ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.srcIp) : ''}
-        <div class="field">
-          <span class="field-label">DEST:</span>
-          <span class="field-value">${highlightValue(req.dest, shieldEnabled)}</span>
-        </div>
-        <div class="field">
-          <span class="field-label">METHOD:</span>
-          <span class="field-value">${highlightValue(req.method, shieldEnabled)}</span>
-        </div>
-        <div class="field">
-          <span class="field-label">PATH:</span>
-          <span class="field-value">${highlightValue(req.path, shieldEnabled)}</span>
-        </div>
-        ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.path) : ''}
-        <div class="field">
-          <span class="field-label">HOST:</span>
-          <span class="field-value">${highlightValue(req.host, shieldEnabled)}</span>
-        </div>
-        <div class="field">
-          <span class="field-label">USER-AGENT:</span>
-          <span class="field-value">${highlightValue(req.userAgent, shieldEnabled)}</span>
-        </div>
-        ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.userAgent) : ''}
+        ${plainField('TIMESTAMP', req.timestamp)}
+        ${annotatedField('SOURCE IP', req.srcIp)}
+        ${plainField('DEST', req.dest)}
+        ${plainField('METHOD', req.method)}
+        ${annotatedField('PATH', req.path)}
+        ${plainField('HOST', req.host)}
+        ${annotatedField('USER-AGENT', req.userAgent)}
         ${req.headers && Object.keys(req.headers).length > 0 ? `
           <div class="field">
             <span class="field-label">HEADERS:</span>
@@ -192,8 +215,8 @@ export function renderRequest(request, container, equippedTool = null) {
         ` : ''}
         ${req.body ? `
           <div class="payload-label">[REQUEST BODY]</div>
-          <div class="payload">${formatPayload(req.body)}</div>
-          ${hcaptchaEnabled ? renderHCaptchaAnnotation(req.body) : ''}
+          <div class="payload${bodyAnn ? ` payload-hcaptcha-${bodyAnn.level}` : ''}">${formatPayload(req.body)}</div>
+          ${bodyAnn ? `<div class="hcaptcha-annotation hcaptcha-${bodyAnn.level}">${bodyAnn.quip}</div>` : ''}
         ` : ''}
       </div>
     </div>
@@ -220,13 +243,37 @@ export function renderActions(enabled, container) {
   `;
 }
 
+const HCAPTCHA_MOCKERY_ALLOW = [
+  'hCaptcha annotated that threat in red. You allowed it through anyway. Bold.',
+  'The AI highlighted the danger. Literally. In red. You permitted it. Astonishing.',
+  'hCaptcha is filing an incident report. The incident is you.',
+  'Three hCaptcha warnings ignored. It is practically driving and you are just honking at it.',
+  'hCaptcha Enterprise™ has contacted your supervisor, their supervisor, and building security.',
+];
+
+const HCAPTCHA_MOCKERY_DENY = [
+  'hCaptcha gave that a green annotation. You blocked it. Green means safe.',
+  'A green rating is the AI\'s way of saying clean traffic. You escalated it to a federal matter.',
+  'hCaptcha marked it safe. You marked it denied. One of you went to school for this.',
+  'That annotation was literally green. As in the color that means things are fine.',
+  'hCaptcha Enterprise™ has enrolled you in mandatory retraining. It is not optional.',
+];
+
+function getHCaptchaMockery(decision, request, state) {
+  if (!state || state.equippedTool !== 'hcaptcha' || decision.correct) return '';
+  const lines = request.isMalicious ? HCAPTCHA_MOCKERY_ALLOW : HCAPTCHA_MOCKERY_DENY;
+  const idx = Math.min((state.hcaptchaFailCount || 1) - 1, lines.length - 1);
+  return `<div class="hcaptcha-mockery">hCaptcha Enterprise™: "${lines[Math.max(0, idx)]}"</div>`;
+}
+
 // Render feedback panel
-export function renderFeedback(request, decision, container) {
+export function renderFeedback(request, decision, container, state = null) {
   const isCorrect = decision.correct;
   const damage = decision.damage || 0;
   const isMalicious = request.isMalicious;
   const wasBlockingLegit = !isCorrect && !isMalicious;
   
+  const mockery = getHCaptchaMockery(decision, request, state);
   if (isCorrect) {
     const verdict = isMalicious ? 'THREAT NEUTRALIZED' : 'CLEAN';
     container.innerHTML = `
@@ -251,6 +298,7 @@ export function renderFeedback(request, decision, container) {
           <div class="feedback-detail">• ${request.explanation}</div>
           <div class="feedback-detail damage">• Customer traffic blocked. Damage: -${damage} Trust Points</div>
         </div>
+        ${mockery}
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
     `;
@@ -266,6 +314,7 @@ export function renderFeedback(request, decision, container) {
           <div class="feedback-detail">• ${request.spotDescription}</div>
           <div class="feedback-detail damage">• Damage: -${damage} Trust Points</div>
         </div>
+        ${mockery}
         <div class="continue-prompt">Press SPACE or click to continue...</div>
       </div>
     `;
@@ -276,6 +325,7 @@ export function renderFeedback(request, decision, container) {
 export function renderStartPage(state, container) {
   const netshieldClass = state.equippedTool === 'netshield' ? 'tool-selected' : 'tool-unselected';
   const hcaptchaClass = state.equippedTool === 'hcaptcha' ? 'tool-selected' : 'tool-unselected';
+  const hcaptchaProClass = state.equippedTool === 'hcaptcha-pro' ? 'tool-selected tool-card-pro' : 'tool-unselected tool-card-pro';
   container.innerHTML = `
     <div class="start-screen">
       <div class="start-logo">▌NETWATCH v2.1▌</div>
@@ -284,7 +334,7 @@ export function renderStartPage(state, container) {
       <div class="start-content">
         <p class="start-intro">You are a Tier-1 SOC Analyst assigned to the graveyard shift at Veridian Systems. Your job: analyze incoming network requests and decide whether to <span class="text-allow">ALLOW</span> or <span class="text-deny">DENY</span> them.</p>
         <p class="start-intro">Some requests are legitimate. Others are attacks. One wrong decision and your corporate network bleeds — whether you let an attack through or block a customer.</p>
-        
+
         <div class="tool-section">
           <div class="tool-header">// EQUIP TOOL (select one)</div>
           <button class="tool-card ${netshieldClass}" data-tool="netshield">
@@ -294,6 +344,10 @@ export function renderStartPage(state, container) {
           <button class="tool-card ${hcaptchaClass}" data-tool="hcaptcha" style="margin-top: 8px;">
             <div class="tool-name">hCAPTCHA ENTERPRISE</div>
             <div class="tool-desc">AI-powered traffic analysis. Annotates each request field with color-coded threat arrows and a professional assessment. Results may vary. Mostly they don't.</div>
+          </button>
+          <button class="tool-card ${hcaptchaProClass}" data-tool="hcaptcha-pro" style="margin-top: 8px;">
+            <div class="tool-name tool-name-pro">hCAPTCHA ENTERPRISE PRO™</div>
+            <div class="tool-desc">Skip the graveyard shift entirely. hCaptcha's autonomous threat elimination handles everything while you relax. May contain explosions. The bots are fine. Mostly.</div>
           </button>
         </div>
         
@@ -323,10 +377,29 @@ export function renderStartPage(state, container) {
 
 // Render game over screen
 export function renderGameOver(state, container) {
-  const accuracy = state.totalRequests > 0 
-    ? Math.round((state.correct / state.totalRequests) * 100) 
+  if (state.proWin) {
+    container.innerHTML = `
+      <div class="game-over-overlay">
+        <div class="game-over-content">
+          <div class="game-over-title pro-win-title">✓ SHIFT COMPLETE ✓</div>
+          <div class="game-over-subtitle pro-win-subtitle">PROTECTED BY hCAPTCHA ENTERPRISE PRO™</div>
+          <div class="stats">
+            <div class="stat">Threats Neutralized: <span class="stat-value">47,831</span></div>
+            <div class="stat">Your Contribution: <span class="stat-value">0</span></div>
+            <div class="stat">Trust Points Remaining: <span class="stat-value">100</span></div>
+          </div>
+          <div class="pro-win-message">hCaptcha did everything. You watched. That's a valid career path.</div>
+          <button class="btn-restart" data-action="restart">[TRY WITHOUT PRO]</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const accuracy = state.totalRequests > 0
+    ? Math.round((state.correct / state.totalRequests) * 100)
     : 0;
-  
+
   container.innerHTML = `
     <div class="game-over-overlay">
       <div class="game-over-content">
@@ -339,6 +412,50 @@ export function renderGameOver(state, container) {
         </div>
         <button class="btn-restart" data-action="restart">[RESTART SHIFT]</button>
         <div class="high-score">High Score: <span>${state.highScore}</span> requests</div>
+      </div>
+    </div>
+  `;
+}
+
+// Render hCaptcha Enterprise PRO animation screen
+export function renderProAnimation(container) {
+  container.innerHTML = `
+    <div class="pro-screen">
+      <div class="pro-title">hCAPTCHA ENTERPRISE PRO™</div>
+      <div class="pro-subtitle">AUTONOMOUS THREAT ELIMINATION IN PROGRESS</div>
+      <hr class="divider">
+      <div class="pro-battlefield">
+        <div class="pro-side pro-good-side">
+          <div class="pro-side-label good-label">AUTHORIZED TRAFFIC</div>
+          <div class="pro-bots">
+            <span class="pro-bot good-bot" style="animation-delay:0.0s">🤖</span>
+            <span class="pro-bot good-bot" style="animation-delay:0.15s">🤖</span>
+            <span class="pro-bot good-bot" style="animation-delay:0.3s">🤖</span>
+            <span class="pro-bot good-bot" style="animation-delay:0.45s">🤖</span>
+            <span class="pro-bot good-bot" style="animation-delay:0.6s">🤖</span>
+          </div>
+        </div>
+        <div class="pro-vs">⚡</div>
+        <div class="pro-side pro-bad-side">
+          <div class="pro-bots">
+            <span class="pro-bot bad-bot" style="animation-delay:0.4s">👾</span>
+            <span class="pro-bot bad-bot" style="animation-delay:1.1s">👾</span>
+            <span class="pro-bot bad-bot" style="animation-delay:1.8s">💀</span>
+            <span class="pro-bot bad-bot" style="animation-delay:2.5s">👾</span>
+            <span class="pro-bot bad-bot" style="animation-delay:3.2s">💀</span>
+          </div>
+          <div class="pro-side-label bad-label">THREATS ELIMINATED</div>
+        </div>
+      </div>
+      <div class="pro-blurb">
+        hCaptcha Enterprise PRO™ is handling all incoming threats autonomously.<br>
+        You may sit back and enjoy your evening. This one's on us.
+      </div>
+      <div class="pro-status-bar">
+        <div class="pro-status-text" id="pro-status-text">Initializing threat matrix...</div>
+        <div class="pro-progress-track">
+          <div class="pro-progress-fill"></div>
+        </div>
       </div>
     </div>
   `;

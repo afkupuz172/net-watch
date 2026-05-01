@@ -2,14 +2,15 @@
 
 import { initPool, getNextRequest } from './requests.js';
 import { createGameState, saveHighScore, getHighScore, TP_REGEN } from './game.js';
-import { 
-  renderHeader, 
-  renderRequest, 
-  renderActions, 
-  renderFeedback, 
+import {
+  renderHeader,
+  renderRequest,
+  renderActions,
+  renderFeedback,
   renderGameOver,
   renderStartPage,
-  renderContinueButton
+  renderContinueButton,
+  renderProAnimation
 } from './ui.js';
 
 const TIMER_DURATION = 15;
@@ -21,7 +22,8 @@ class NetwatchGame {
     this.actionsContainer = null;
     this.timerInterval = null;
     this.timeLeft = TIMER_DURATION;
-    
+    this.proStatusInterval = null;
+
     this.init();
   }
   
@@ -66,6 +68,7 @@ class NetwatchGame {
   
   startNewGame() {
     this.stopTimer();
+    if (this.proStatusInterval) { clearInterval(this.proStatusInterval); this.proStatusInterval = null; }
     this.state = createGameState();
     this.state.highScore = getHighScore();
     this.gameoverContainer.innerHTML = '';
@@ -167,6 +170,9 @@ class NetwatchGame {
       this.state.correct++;
     } else {
       this.state.wrong++;
+      if (this.state.equippedTool === 'hcaptcha') {
+        this.state.hcaptchaFailCount++;
+      }
     }
     this.state.totalRequests++;
     
@@ -216,20 +222,56 @@ class NetwatchGame {
     
     if (this.state.gameState === 'start') {
       renderStartPage(this.state, this.requestContent);
+    } else if (this.state.gameState === 'pro-animation') {
+      renderProAnimation(this.requestContent);
     } else if (this.state.gameState === 'playing') {
       const request = this.state.currentRequest;
       renderRequest(request, this.requestContent, this.state.equippedTool);
       renderActions(true, this.actionsContainer);
     } else if (this.state.gameState === 'feedback') {
       const request = this.state.currentRequest;
-      renderFeedback(request, this.state.lastDecision, this.requestContent);
+      renderFeedback(request, this.state.lastDecision, this.requestContent, this.state);
       renderContinueButton(this.actionsContainer);
     }
   }
   
   startGame() {
+    if (this.state.equippedTool === 'hcaptcha-pro') {
+      this.startProMode();
+      return;
+    }
     this.state.gameState = 'playing';
     this.nextRequest();
+  }
+
+  startProMode() {
+    this.state.gameState = 'pro-animation';
+    this.render();
+
+    const messages = [
+      'Initializing threat matrix...',
+      'Analyzing 47,831 traffic patterns...',
+      'Deploying countermeasures...',
+      'Good bots holding the perimeter...',
+      'Eliminating threat actors...',
+      'All threats neutralized. You\'re welcome.',
+    ];
+    let msgIdx = 0;
+    this.proStatusInterval = setInterval(() => {
+      const el = document.getElementById('pro-status-text');
+      if (el && msgIdx < messages.length) {
+        el.textContent = messages[msgIdx++];
+      } else {
+        clearInterval(this.proStatusInterval);
+        this.proStatusInterval = null;
+      }
+    }, 1200);
+
+    setTimeout(() => {
+      if (this.proStatusInterval) { clearInterval(this.proStatusInterval); this.proStatusInterval = null; }
+      this.state.proWin = true;
+      this.gameOver();
+    }, 7500);
   }
   
   bindEvents() {

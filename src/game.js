@@ -15,7 +15,9 @@ export function createGameState() {
     currentRequest: null,
     lastDecision: null, // { correct: boolean, damage: number }
     highScore: parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10),
-    equippedTool: null // 'netshield' | null
+    equippedTool: null, // 'netshield' | 'hcaptcha' | 'hcaptcha-pro' | null
+    hcaptchaFailCount: 0,
+    proWin: false
   };
 }
 
